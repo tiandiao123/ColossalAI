@@ -38,6 +38,9 @@ if is_wandb_available():
     import wandb
 
 
-
 logger = get_logger(__name__, log_level="INFO")
+
+DATASET_NAME_MAPPING = {
+    "lambdalabs/pokemon-blip-captions": ("image", "text"),
+}
 
