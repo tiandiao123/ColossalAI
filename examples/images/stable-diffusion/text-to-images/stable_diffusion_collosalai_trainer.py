@@ -14,7 +14,7 @@ import torch.nn.functional as F
 import torch.utils.checkpoint
 import transformers
 # from accelerate import Accelerator
-# from accelerate.logging import get_logger
+from accelerate.logging import get_logger
 # from accelerate.state import AcceleratorState
 # from accelerate.utils import ProjectConfiguration, set_seed
 from datasets import load_dataset
@@ -115,6 +115,41 @@ def main():
     tokenizer = CLIPTokenizer.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="tokenizer", revision=args.revision
     )
+
+    text_encoder = CLIPTextModel.from_pretrained(
+        args.pretrained_model_name_or_path, subfolder="text_encoder", revision=args.revision
+    )
+    vae = AutoencoderKL.from_pretrained(
+        args.pretrained_model_name_or_path, subfolder="vae", revision=args.revision
+    )
+
+    unet = UNet2DConditionModel.from_pretrained(
+        args.pretrained_model_name_or_path, subfolder="unet", revision=args.non_ema_revision
+    )
+
+        if args.use_ema:
+        ema_unet = UNet2DConditionModel.from_pretrained(
+            args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision
+        )
+        ema_unet = EMAModel(ema_unet.parameters(), model_cls=UNet2DConditionModel, model_config=ema_unet.config)
+
+
+    # Freeze vae and text_encoder
+    vae.requires_grad_(False)
+    text_encoder.requires_grad_(False)
+
+    if args.enable_xformers_memory_efficient_attention:
+        if is_xformers_available():
+            import xformers
+
+            xformers_version = version.parse(xformers.__version__)
+            if xformers_version == version.parse("0.0.16"):
+                logger.warn(
+                    "xFormers 0.0.16 cannot be used for training in some GPUs. If you observe problems during training, please update xFormers to at least 0.0.17. See https://huggingface.co/docs/diffusers/main/en/optimization/xformers for more details."
+                )
+            unet.enable_xformers_memory_efficient_attention()
+        else:
+            raise ValueError("xformers is not available. Make sure it is installed correctly")
 
     
 
