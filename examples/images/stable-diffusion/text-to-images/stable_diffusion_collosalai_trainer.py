@@ -320,6 +320,13 @@ def main():
         args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
         overrode_max_train_steps = True
 
+    lr_scheduler = get_scheduler(
+        args.lr_scheduler,
+        optimizer=optimizer,
+        num_warmup_steps=args.lr_warmup_steps * args.gradient_accumulation_steps,
+        num_training_steps=args.max_train_steps * args.gradient_accumulation_steps,
+    )
+
     # Use Booster API to use Gemini/Zero with ColossalAI
 
     booster_kwargs = {}
@@ -334,9 +341,7 @@ def main():
 
     booster = Booster(plugin=plugin, **booster_kwargs)
 
+    unet, optimizer, _, _, lr_scheduler = booster.boost(unet, optimizer, lr_scheduler=lr_scheduler)
     
-
-
-
 if __name__ == "__main__":
     main()
