@@ -8,4 +8,4 @@ pipe = pipe.to("cuda")
 prompt = "The skyling of bellevue is surrounded by clouds"
 image = pipe(prompt).images[0]  
     
-image.save("astronaut_rides_horse.png")
+image.save("example.png")
