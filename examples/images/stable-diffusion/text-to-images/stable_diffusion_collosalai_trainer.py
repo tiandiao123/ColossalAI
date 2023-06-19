@@ -44,3 +44,21 @@ DATASET_NAME_MAPPING = {
     "lambdalabs/pokemon-blip-captions": ("image", "text"),
 }
 
+
+def main():
+    args = parse_args()
+
+    if args.non_ema_revision is not None:
+        deprecate(
+            "non_ema_revision!=None",
+            "0.15.0",
+            message=(
+                "Downloading 'non_ema' weights from revision branches of the Hub is deprecated. Please make sure to"
+                " use `--variant=non_ema` instead."
+            ),
+        )
+    logging_dir = os.path.join(args.output_dir, args.logging_dir)
+
+
+if __name__ == "__main__":
+    main()
