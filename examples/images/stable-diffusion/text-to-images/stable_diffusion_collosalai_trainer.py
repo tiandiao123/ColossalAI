@@ -342,6 +342,128 @@ def main():
     booster = Booster(plugin=plugin, **booster_kwargs)
 
     unet, optimizer, _, _, lr_scheduler = booster.boost(unet, optimizer, lr_scheduler=lr_scheduler)
+
+    weight_dtype = torch.float32
+    if args.mixed_precision == "fp16":
+        weight_dtype = torch.float16
+    elif args.mixed_precision == "bf16":
+        weight_dtype = torch.bfloat16
+
+    text_encoder.to(get_current_device(), dtype=weight_dtype)
+    vae.to(get_current_device(), dtype=weight_dtype)
+    # We need to recalculate our total training steps as the size of the training dataloader may have changed.
+    num_update_steps_per_epoch = math.ceil(len(train_dataloader) / args.gradient_accumulation_steps)
+    if overrode_max_train_steps:
+        args.max_train_steps = args.num_train_epochs * num_update_steps_per_epoch
+    # Afterwards we recalculate our number of training epochs
+    args.num_train_epochs = math.ceil(args.max_train_steps / num_update_steps_per_epoch)
+
+    # Train!
+    total_batch_size = args.train_batch_size * accelerator.num_processes * args.gradient_accumulation_steps
+
+    logger.info("***** Running training *****")
+    logger.info(f"  Num examples = {len(train_dataset)}")
+    logger.info(f"  Num Epochs = {args.num_train_epochs}")
+    logger.info(f"  Instantaneous batch size per device = {args.train_batch_size}")
+    logger.info(f"  Total train batch size (w. parallel, distributed & accumulation) = {total_batch_size}")
+    logger.info(f"  Gradient Accumulation steps = {args.gradient_accumulation_steps}")
+    logger.info(f"  Total optimization steps = {args.max_train_steps}")
+    global_step = 0
+    first_epoch = 0
+
+    # Only show the progress bar once on each machine.
+    progress_bar = tqdm(range(global_step, args.max_train_steps), disable = (local_rank!=0))
+    progress_bar.set_description("Steps")
+
+    torch.cuda.synchronize()
+    for epoch in range(args.num_train_epochs):
+        unet.train()
+        train_loss = 0.0
+        for step, batch in enumerate(train_dataloader):
+            # Skip steps until we reach the resumed step
+            if args.resume_from_checkpoint and epoch == first_epoch and step < resume_step:
+                if step % args.gradient_accumulation_steps == 0:
+                    progress_bar.update(1)
+                continue
+            
+            for key, value in batch.items():
+                batch[key] = value.to(get_current_device(), non_blocking=True)
+            
+            # Convert images to latent space
+            optimizer.zero_grad()
+            
+            latents = vae.encode(batch["pixel_values"].to(weight_dtype)).latent_dist.sample()
+            latents = latents * vae.config.scaling_factor
+
+            # Sample noise that we'll add to the latents
+            noise = torch.randn_like(latents)
+            if args.noise_offset:
+                # https://www.crosslabs.org//blog/diffusion-with-offset-noise
+                noise += args.noise_offset * torch.randn(
+                    (latents.shape[0], latents.shape[1], 1, 1), device=latents.device
+                )
+            if args.input_perturbation:
+                new_noise = noise + args.input_perturbation * torch.randn_like(noise)
+            bsz = latents.shape[0]
+            # Sample a random timestep for each image
+            timesteps = torch.randint(0, noise_scheduler.config.num_train_timesteps, (bsz,), device=latents.device)
+            timesteps = timesteps.long()
+
+            # Add noise to the latents according to the noise magnitude at each timestep
+            # (this is the forward diffusion process)
+            if args.input_perturbation:
+                noisy_latents = noise_scheduler.add_noise(latents, new_noise, timesteps)
+            else:
+                noisy_latents = noise_scheduler.add_noise(latents, noise, timesteps)
+
+            # Get the text embedding for conditioning
+            encoder_hidden_states = text_encoder(batch["input_ids"])[0]
+
+            # Get the target for loss depending on the prediction type
+            if args.prediction_type is not None:
+                # set prediction_type of scheduler if defined
+                noise_scheduler.register_to_config(prediction_type=args.prediction_type)
+
+            if noise_scheduler.config.prediction_type == "epsilon":
+                target = noise
+            elif noise_scheduler.config.prediction_type == "v_prediction":
+                target = noise_scheduler.get_velocity(latents, noise, timesteps)
+            else:
+                raise ValueError(f"Unknown prediction type {noise_scheduler.config.prediction_type}")
+
+            # Predict the noise residual and compute loss
+            model_pred = unet(noisy_latents, timesteps, encoder_hidden_states).sample
+
+            if args.snr_gamma is None:
+                loss = F.mse_loss(model_pred.float(), target.float(), reduction="mean")
+            else:
+                # Compute loss-weights as per Section 3.4 of https://arxiv.org/abs/2303.09556.
+                # Since we predict the noise instead of x_0, the original formulation is slightly changed.
+                # This is discussed in Section 4.2 of the same paper.
+                snr = compute_snr(timesteps)
+                mse_loss_weights = (
+                    torch.stack([snr, args.snr_gamma * torch.ones_like(timesteps)], dim=1).min(dim=1)[0] / snr
+                )
+                # We first calculate the original loss. Then we mean over the non-batch dimensions and
+                # rebalance the sample-wise losses with their respective loss weights.
+                # Finally, we take the mean of the rebalanced loss.
+                loss = F.mse_loss(model_pred.float(), target.float(), reduction="none")
+                loss = loss.mean(dim=list(range(1, len(loss.shape)))) * mse_loss_weights
+                loss = loss.mean()
+
+            # Gather the losses across all processes for logging (if we use distributed training).
+            avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
+            train_loss += avg_loss.item() / args.gradient_accumulation_steps
+
+            
+            optimizer.backward(loss)
+
+            optimizer.step()
+            lr_scheduler.step()
+            logger.info(f"max GPU_mem cost is {torch.cuda.max_memory_allocated()/2**20} MB", ranks=[0])
+
+
+
     
 if __name__ == "__main__":
     main()
