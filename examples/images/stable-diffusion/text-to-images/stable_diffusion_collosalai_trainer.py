@@ -462,7 +462,43 @@ def main():
             lr_scheduler.step()
             logger.info(f"max GPU_mem cost is {torch.cuda.max_memory_allocated()/2**20} MB", ranks=[0])
 
+            if global_step % args.checkpointing_steps == 0:
+                if local_rank == 0:
+                    # _before_ saving state, check if this save would set us over the `checkpoints_total_limit`
+                    if args.checkpoints_total_limit is not None:
+                        checkpoints = os.listdir(args.output_dir)
+                        checkpoints = [d for d in checkpoints if d.startswith("checkpoint")]
+                        checkpoints = sorted(checkpoints, key=lambda x: int(x.split("-")[1]))
 
+                        # before we save the new checkpoint, we need to have at _most_ `checkpoints_total_limit - 1` checkpoints
+                        if len(checkpoints) >= args.checkpoints_total_limit:
+                            num_to_remove = len(checkpoints) - args.checkpoints_total_limit + 1
+                            removing_checkpoints = checkpoints[0:num_to_remove]
+
+                            logger.info(
+                                f"{len(checkpoints)} checkpoints already exist, removing {len(removing_checkpoints)} checkpoints"
+                            )
+                            logger.info(f"removing checkpoints: {', '.join(removing_checkpoints)}")
+
+                            for removing_checkpoint in removing_checkpoints:
+                                removing_checkpoint = os.path.join(args.output_dir, removing_checkpoint)
+                                shutil.rmtree(removing_checkpoint)
+
+                    save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
+                    booster.save_model(unet, os.path.join(save_path, "diffusion_pytorch_model.bin"))
+                    
+                    if global_step >= args.max_train_steps:
+                        break
+
+            torch.cuda.synchronize()
+
+            booster.save_model(unet, os.path.join(args.output_dir, "diffusion_pytorch_model.bin"))
+            logger.info(f"Saving model checkpoint to {args.output_dir} on rank {local_rank}")
+            if local_rank == 0:
+                if not os.path.exists(os.path.join(args.output_dir, "config.json")):
+                    shutil.copy(os.path.join(args.pretrained_model_name_or_path, "unet/config.json"), args.output_dir)
+                if args.push_to_hub:
+                    repo.push_to_hub(commit_message="End of training", blocking=False, auto_lfs_prune=True)
 
     
 if __name__ == "__main__":
