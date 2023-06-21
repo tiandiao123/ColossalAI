@@ -459,7 +459,7 @@ def main():
                     save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                     booster.save_model(unet, os.path.join(save_path, "diffusion_pytorch_model.bin"))
             
-            logger.info(f'train_loss : {loss.detach().item()}')
+            logger.info(f'train_loss : {loss.detach().item()} for global_step : {global_step}')
             logger.info(f'lr: {lr_scheduler.get_last_lr()[0]}')
             logger.info(f"max GPU_mem cost is {torch.cuda.max_memory_allocated()/2**20} MB", ranks=[0])
 
