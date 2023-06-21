@@ -25,7 +25,6 @@ from parse_arguments import parse_args
 import diffusers
 from diffusers import AutoencoderKL, DDPMScheduler, StableDiffusionPipeline, UNet2DConditionModel
 from diffusers.optimization import get_scheduler
-from diffusers.training_utils import EMAModel
 from diffusers.utils import check_min_version, deprecate, is_wandb_available
 from diffusers.utils.import_utils import is_xformers_available
 
@@ -78,24 +77,7 @@ def main():
 
     booster = Booster(plugin=plugin, **booster_kwargs)
 
-    if args.non_ema_revision is not None:
-        deprecate(
-            "non_ema_revision!=None",
-            "0.15.0",
-            message=(
-                "Downloading 'non_ema' weights from revision branches of the Hub is deprecated. Please make sure to"
-                " use `--variant=non_ema` instead."
-            ),
-        )
     logging_dir = os.path.join(args.output_dir, args.logging_dir)
-
-    print(logging_dir)
-
-    # local_rank = gpc.get_local_rank(ParallelMode.DATA)
-    # world_size = gpc.get_world_size(ParallelMode.DATA)
-
-    
-
     # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
@@ -146,13 +128,6 @@ def main():
     unet = UNet2DConditionModel.from_pretrained(
         args.pretrained_model_name_or_path, subfolder="unet", revision=args.non_ema_revision
     )
-
-    if args.use_ema:
-        ema_unet = UNet2DConditionModel.from_pretrained(
-            args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision
-        )
-        ema_unet = EMAModel(ema_unet.parameters(), model_cls=UNet2DConditionModel, model_config=ema_unet.config)
-
 
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
@@ -371,7 +346,6 @@ def main():
 
     torch.cuda.synchronize()
     print("start training ... ")
-    exit(0)
 
     for epoch in range(args.num_train_epochs):
         unet.train()
@@ -449,15 +423,16 @@ def main():
                 loss = loss.mean()
 
             # Gather the losses across all processes for logging (if we use distributed training).
-            avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
-            train_loss += avg_loss.item() / args.gradient_accumulation_steps
+            # avg_loss = accelerator.gather(loss.repeat(args.train_batch_size)).mean()
+            # train_loss += avg_loss.item() / args.gradient_accumulation_steps
 
             
-            optimizer.backward(loss)
-
+            booster.backward(loss, optimizer)
             optimizer.step()
+            optimizer.zero_grad()
             lr_scheduler.step()
-            logger.info(f"max GPU_mem cost is {torch.cuda.max_memory_allocated()/2**20} MB", ranks=[0])
+            global_step += 1
+            
 
             if global_step % args.checkpointing_steps == 0:
                 if local_rank == 0:
@@ -483,19 +458,23 @@ def main():
 
                     save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
                     booster.save_model(unet, os.path.join(save_path, "diffusion_pytorch_model.bin"))
-                    
-                    if global_step >= args.max_train_steps:
-                        break
+            
+            logger.info(f'train_loss : {loss.detach().item()}')
+            logger.info(f'lr: {lr_scheduler.get_last_lr()[0]}')
+            logger.info(f"max GPU_mem cost is {torch.cuda.max_memory_allocated()/2**20} MB", ranks=[0])
+
+            logs = {"step_loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
+            progress_bar.set_postfix(**logs)
+            if global_step >= args.max_train_steps:
+                break
 
             torch.cuda.synchronize()
 
-            booster.save_model(unet, os.path.join(args.output_dir, "diffusion_pytorch_model.bin"))
-            logger.info(f"Saving model checkpoint to {args.output_dir} on rank {local_rank}")
-            if local_rank == 0:
-                if not os.path.exists(os.path.join(args.output_dir, "config.json")):
-                    shutil.copy(os.path.join(args.pretrained_model_name_or_path, "unet/config.json"), args.output_dir)
-                if args.push_to_hub:
-                    repo.push_to_hub(commit_message="End of training", blocking=False, auto_lfs_prune=True)
+
+    torch.cuda.synchronize()
+    if local_rank == 0:
+        booster.save_model(unet, os.path.join(args.output_dir, "diffusion_pytorch_model.bin"))
+        logger.info(f"Saving model checkpoint to {args.output_dir} on rank {local_rank}")
 
     
 if __name__ == "__main__":
