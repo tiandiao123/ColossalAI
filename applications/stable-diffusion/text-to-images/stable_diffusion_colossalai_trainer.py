@@ -47,8 +47,8 @@ from colossalai.booster.plugin import GeminiPlugin, LowLevelZeroPlugin, TorchDDP
 if is_wandb_available():
     import wandb
 
-
-logger = get_logger(__name__, log_level="INFO")
+disable_existing_loggers()
+logger = get_dist_logger()
 
 DATASET_NAME_MAPPING = {
     "lambdalabs/pokemon-blip-captions": ("image", "text"),
@@ -211,26 +211,10 @@ def main():
             args.learning_rate * args.gradient_accumulation_steps * args.train_batch_size * world_size
         )
 
-    # Initialize the optimizer
-    if args.use_8bit_adam:
-        try:
-            import bitsandbytes as bnb
-        except ImportError:
-            raise ImportError(
-                "Please install bitsandbytes to use 8-bit Adam. You can do so by running `pip install bitsandbytes`"
-            )
 
-        optimizer_cls = bnb.optim.AdamW8bit
-    else:
-        optimizer_cls = torch.optim.AdamW
 
-    optimizer = optimizer_cls(
-        unet.parameters(),
-        lr=args.learning_rate,
-        betas=(args.adam_beta1, args.adam_beta2),
-        weight_decay=args.adam_weight_decay,
-        eps=args.adam_epsilon,
-    )
+    # config optimizer for colossalai zero
+    optimizer = HybridAdam(unet.parameters(), lr=args.learning_rate, initial_scale=2**5, clipping_norm=args.max_grad_norm)
 
     # Get the datasets: you can either provide your own training and evaluation files (see below)
     # or specify a Dataset from the hub (the dataset will be downloaded automatically from the datasets Hub).
@@ -353,7 +337,6 @@ def main():
 
     unet, optimizer, _, _, lr_scheduler = booster.boost(unet, optimizer, lr_scheduler=lr_scheduler)
 
-    exit(0)
 
     weight_dtype = torch.float32
     if args.mixed_precision == "fp16":
@@ -388,6 +371,9 @@ def main():
     progress_bar.set_description("Steps")
 
     torch.cuda.synchronize()
+    print("start training ... ")
+    exit(0)
+
     for epoch in range(args.num_train_epochs):
         unet.train()
         train_loss = 0.0
