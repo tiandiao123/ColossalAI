@@ -215,6 +215,12 @@ def parse_args():
                         default='torch_ddp',
                         choices=['torch_ddp', 'torch_ddp_fp16', 'gemini', 'low_level_zero'],
                         help="plugin to use")
+    parser.add_argument(
+        "--placement",
+        type=str,
+        default="cpu",
+        help="Placement Policy for Gemini. Valid when using colossalai as dist plan.",
+    )
                         
     parser.add_argument(
         "--logging_dir",

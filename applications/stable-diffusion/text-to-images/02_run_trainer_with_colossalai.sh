@@ -16,4 +16,5 @@ torchrun --nproc_per_node 2 stable_diffusion_colossalai_trainer.py \
     --learning_rate=1e-05 \
     --max_grad_norm=1 \
     --lr_scheduler="constant" --lr_warmup_steps=0 \
-    --output_dir="sd-pokemon-model"
+    --output_dir="sd-pokemon-model" \
+    --plugin="gemini"

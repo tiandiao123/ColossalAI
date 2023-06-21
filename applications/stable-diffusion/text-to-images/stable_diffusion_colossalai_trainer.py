@@ -33,6 +33,7 @@ from diffusers.utils.import_utils import is_xformers_available
 import colossalai
 from colossalai.context.parallel_mode import ParallelMode
 from colossalai.core import global_context as gpc
+from colossalai.cluster import DistCoordinator
 from colossalai.logging import disable_existing_loggers, get_dist_logger
 from colossalai.nn.optimizer import HybridAdam
 from colossalai.utils import get_current_device
@@ -57,10 +58,29 @@ DATASET_NAME_MAPPING = {
 def main():
     args = parse_args()
 
+    print(args)
     if args.seed is None:
         colossalai.launch_from_torch(config={})
     else:
         colossalai.launch_from_torch(config={}, seed=args.seed)
+
+    coordinator = DistCoordinator()
+    world_size = coordinator.world_size
+    print(world_size)
+
+    booster_kwargs = {}
+    if args.plugin == 'torch_ddp_fp16':
+        booster_kwargs['mixed_precision'] = 'fp16'
+    if args.plugin.startswith('torch_ddp'):
+        plugin = TorchDDPPlugin()
+    elif args.plugin == 'gemini':
+        plugin = GeminiPlugin(placement_policy=args.placement, strict_ddp_mode=True, initial_scale=2 ** 5)
+    elif args.plugin == 'low_level_zero':
+        plugin = LowLevelZeroPlugin(initial_scale=2 ** 5)
+
+    booster = Booster(plugin=plugin, **booster_kwargs)
+    
+    exit(0)
 
     if args.non_ema_revision is not None:
         deprecate(
@@ -123,7 +143,7 @@ def main():
         args.pretrained_model_name_or_path, subfolder="unet", revision=args.non_ema_revision
     )
 
-        if args.use_ema:
+    if args.use_ema:
         ema_unet = UNet2DConditionModel.from_pretrained(
             args.pretrained_model_name_or_path, subfolder="unet", revision=args.revision
         )
