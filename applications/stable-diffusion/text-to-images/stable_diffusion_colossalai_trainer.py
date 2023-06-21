@@ -66,7 +66,6 @@ def main():
 
     coordinator = DistCoordinator()
     world_size = coordinator.world_size
-    print(world_size)
 
     booster_kwargs = {}
     if args.plugin == 'torch_ddp_fp16':
@@ -79,8 +78,6 @@ def main():
         plugin = LowLevelZeroPlugin(initial_scale=2 ** 5)
 
     booster = Booster(plugin=plugin, **booster_kwargs)
-    
-    exit(0)
 
     if args.non_ema_revision is not None:
         deprecate(
@@ -93,15 +90,21 @@ def main():
         )
     logging_dir = os.path.join(args.output_dir, args.logging_dir)
 
-    local_rank = gpc.get_local_rank(ParallelMode.DATA)
-    world_size = gpc.get_world_size(ParallelMode.DATA)
+    print(logging_dir)
 
-        # Make one log on every process with the configuration for debugging.
+    # local_rank = gpc.get_local_rank(ParallelMode.DATA)
+    # world_size = gpc.get_world_size(ParallelMode.DATA)
+
+    
+
+    # Make one log on every process with the configuration for debugging.
     logging.basicConfig(
         format="%(asctime)s - %(levelname)s - %(name)s - %(message)s",
         datefmt="%m/%d/%Y %H:%M:%S",
         level=logging.INFO,
     )
+
+    local_rank = coordinator.local_rank
     if local_rank == 0:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_warning()
@@ -110,8 +113,9 @@ def main():
         datasets.utils.logging.set_verbosity_error()
         transformers.utils.logging.set_verbosity_error()
         diffusers.utils.logging.set_verbosity_error()
+
     
-        # Handle the repository creation
+    # Handle the repository creation
     if local_rank == 0:
         if args.output_dir is not None:
             os.makedirs(args.output_dir, exist_ok=True)
@@ -120,6 +124,7 @@ def main():
             repo_id = create_repo(
                 repo_id=args.hub_model_id or Path(args.output_dir).name, exist_ok=True, token=args.hub_token
             ).repo_id
+
 
     # Load scheduler, tokenizer and models.
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
@@ -153,6 +158,7 @@ def main():
     # Freeze vae and text_encoder
     vae.requires_grad_(False)
     text_encoder.requires_grad_(False)
+
 
     if args.enable_xformers_memory_efficient_attention:
         if is_xformers_available():
@@ -345,19 +351,9 @@ def main():
 
     # Use Booster API to use Gemini/Zero with ColossalAI
 
-    booster_kwargs = {}
-    if args.plugin == 'torch_ddp_fp16':
-        booster_kwargs['mixed_precision'] = 'fp16'
-    if args.plugin.startswith('torch_ddp'):
-        plugin = TorchDDPPlugin()
-    elif args.plugin == 'gemini':
-        plugin = GeminiPlugin(placement_policy=args.placement, strict_ddp_mode=True, initial_scale=2 ** 5)
-    elif args.plugin == 'low_level_zero':
-        plugin = LowLevelZeroPlugin(initial_scale=2 ** 5)
-
-    booster = Booster(plugin=plugin, **booster_kwargs)
-
     unet, optimizer, _, _, lr_scheduler = booster.boost(unet, optimizer, lr_scheduler=lr_scheduler)
+
+    exit(0)
 
     weight_dtype = torch.float32
     if args.mixed_precision == "fp16":
