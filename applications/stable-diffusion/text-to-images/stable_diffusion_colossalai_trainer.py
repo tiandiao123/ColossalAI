@@ -86,6 +86,9 @@ def main():
     )
 
     local_rank = coordinator.local_rank
+    local_rank = int(local_rank)
+    logger.info(f'local_rank: {local_rank}')
+
     if local_rank == 0:
         datasets.utils.logging.set_verbosity_warning()
         transformers.utils.logging.set_verbosity_warning()
@@ -99,13 +102,13 @@ def main():
     # Handle the repository creation
     if local_rank == 0:
         if args.output_dir is not None:
+            logger.info(f"create output dir : {args.output_dir}")
             os.makedirs(args.output_dir, exist_ok=True)
 
         if args.push_to_hub:
             repo_id = create_repo(
                 repo_id=args.hub_model_id or Path(args.output_dir).name, exist_ok=True, token=args.hub_token
             ).repo_id
-
 
     # Load scheduler, tokenizer and models.
     noise_scheduler = DDPMScheduler.from_pretrained(args.pretrained_model_name_or_path, subfolder="scheduler")
@@ -432,9 +435,11 @@ def main():
             optimizer.zero_grad()
             lr_scheduler.step()
             global_step += 1
+            progress_bar.update(1)
             
 
             if global_step % args.checkpointing_steps == 0:
+
                 if local_rank == 0:
                     # _before_ saving state, check if this save would set us over the `checkpoints_total_limit`
                     if args.checkpoints_total_limit is not None:
@@ -457,6 +462,8 @@ def main():
                                 shutil.rmtree(removing_checkpoint)
 
                     save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
+                    if os.path.isdir(save_path) is False:
+                        os.makedirs(save_path)
                     booster.save_model(unet, os.path.join(save_path, "diffusion_pytorch_model.bin"))
             
             logger.info(f'train_loss : {loss.detach().item()} for global_step : {global_step}')
