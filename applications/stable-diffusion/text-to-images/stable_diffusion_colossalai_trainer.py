@@ -13,7 +13,6 @@ import torch
 import torch.nn.functional as F
 import torch.utils.checkpoint
 import transformers
-from accelerate.logging import get_logger
 from datasets import load_dataset
 from huggingface_hub import create_repo, upload_folder
 from packaging import version
