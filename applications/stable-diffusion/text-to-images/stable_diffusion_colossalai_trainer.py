@@ -350,6 +350,7 @@ def main():
     torch.cuda.synchronize()
     print("start training ... ")
 
+    save_flag = False
     for epoch in range(args.num_train_epochs):
         unet.train()
         train_loss = 0.0
@@ -461,15 +462,14 @@ def main():
                                 removing_checkpoint = os.path.join(args.output_dir, removing_checkpoint)
                                 shutil.rmtree(removing_checkpoint)
 
-                    save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
-                    if os.path.isdir(save_path) is False:
-                        os.makedirs(save_path)
-                    booster.save_model(unet, os.path.join(save_path, "diffusion_pytorch_model.bin"))
+                    # save_path = os.path.join(args.output_dir, f"checkpoint-{global_step}")
+                    # if os.path.isdir(save_path) is False:
+                    #     os.makedirs(save_path)
+                    # booster.save_model(unet, os.path.join(save_path, "diffusion_pytorch_model.bin"))
+                    # print("finished saving")
             
             logger.info(f'train_loss : {loss.detach().item()} for global_step : {global_step}')
             logger.info(f'lr: {lr_scheduler.get_last_lr()[0]}')
-            logger.info(f"max GPU_mem cost is {torch.cuda.max_memory_allocated()/2**20} MB", ranks=[0])
-
             logs = {"step_loss": loss.detach().item(), "lr": lr_scheduler.get_last_lr()[0]}
             progress_bar.set_postfix(**logs)
             if global_step >= args.max_train_steps:
@@ -478,10 +478,13 @@ def main():
             torch.cuda.synchronize()
 
 
+    print("finished training, beging saving ...")
     torch.cuda.synchronize()
     if local_rank == 0:
+        print("start saving")
         booster.save_model(unet, os.path.join(args.output_dir, "diffusion_pytorch_model.bin"))
         logger.info(f"Saving model checkpoint to {args.output_dir} on rank {local_rank}")
+        print("finished saving")
 
     
 if __name__ == "__main__":
