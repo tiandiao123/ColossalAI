@@ -479,10 +479,8 @@ def main():
 
 
     torch.cuda.synchronize()
-    print("start saving")
     booster.save_model(unet, os.path.join(args.output_dir, "diffusion_pytorch_model.bin"))
     logger.info(f"Saving model checkpoint to {args.output_dir} on rank {local_rank}")
-    print("finished saving")
 
     
 if __name__ == "__main__":
