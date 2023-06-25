@@ -501,7 +501,7 @@ def main():
 
 
     torch.cuda.synchronize()
-    booster.save_model(unet, os.path.join(args.output_dir, "diffusion_pytorch_model.bin"))
+    booster.save_model(unet, os.path.join(args.output_dir, "diffusion_pytorch_model_lora.bin"))
     logger.info(f"Saving model checkpoint to {args.output_dir} on rank {local_rank}")
 
 
