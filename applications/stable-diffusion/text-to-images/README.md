@@ -108,68 +108,13 @@ torchrun --nproc_per_node 4 stable_diffusion_colossalai_trainer.py \
 
 You can change the training config in the yaml file
 
-- devices: device number used for training, default = 8
-- max_epochs: max training epochs, default = 2
+- nproc_per_node: device number used for training, default = 4
 - precision: the precision type used in training, default = 16 (fp16), you must use fp16 if you want to apply colossalai
+- plugin：we support the following training stategies: 'torch_ddp', 'torch_ddp_fp16', 'gemini', 'low_level_zero', and we choose gemini as our demonstration in our example. 
 - placement_policy: the training strategy supported by Colossal AI, default = 'cuda', which refers to loading all the parameters into cuda memory. On the other hand, 'cpu' refers to 'cpu offload' strategy while 'auto' enables 'Gemini', both featured by Colossal AI.
 - more information about the configuration of ColossalAIStrategy can be found [here](https://pytorch-lightning.readthedocs.io/en/latest/advanced/model_parallel.html#colossal-ai)
+- Also, for more arguments info, please check parse_arguments.py file in the current directory.
 
-
-## Finetune Example
-### Training on Teyvat Datasets
-
-We provide the finetuning example on [Teyvat](https://huggingface.co/datasets/Fazzie/Teyvat) dataset, which is create by BLIP generated captions.
-
-You can run by config `configs/Teyvat/train_colossalai_teyvat.yaml`
-```
-python main.py --logdir /tmp/ -t -b configs/Teyvat/train_colossalai_teyvat.yaml
-```
-
-## Inference
-
-You can get your training last.ckpt and train config.yaml in your `--logdir`, and run by
-```
-python scripts/txt2img.py --prompt "a photograph of an astronaut riding a horse" --plms
-    --outdir ./output \
-    --ckpt path/to/logdir/checkpoints/last.ckpt \
-    --config /path/to/logdir/configs/project.yaml  \
-```
-
-```commandline
-usage: txt2img.py [-h] [--prompt [PROMPT]] [--outdir [OUTDIR]] [--skip_grid] [--skip_save] [--ddim_steps DDIM_STEPS] [--plms] [--laion400m] [--fixed_code] [--ddim_eta DDIM_ETA]
-                  [--n_iter N_ITER] [--H H] [--W W] [--C C] [--f F] [--n_samples N_SAMPLES] [--n_rows N_ROWS] [--scale SCALE] [--from-file FROM_FILE] [--config CONFIG] [--ckpt CKPT]
-                  [--seed SEED] [--precision {full,autocast}]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  --prompt [PROMPT]     the prompt to render
-  --outdir [OUTDIR]     dir to write results to
-  --skip_grid           do not save a grid, only individual samples. Helpful when evaluating lots of samples
-  --skip_save           do not save individual samples. For speed measurements.
-  --ddim_steps DDIM_STEPS
-                        number of ddim sampling steps
-  --plms                use plms sampling
-  --laion400m           uses the LAION400M model
-  --fixed_code          if enabled, uses the same starting code across samples
-  --ddim_eta DDIM_ETA   ddim eta (eta=0.0 corresponds to deterministic sampling
-  --n_iter N_ITER       sample this often
-  --H H                 image height, in pixel space
-  --W W                 image width, in pixel space
-  --C C                 latent channels
-  --f F                 downsampling factor
-  --n_samples N_SAMPLES
-                        how many samples to produce for each given prompt. A.k.a. batch size
-  --n_rows N_ROWS       rows in the grid (default: n_samples)
-  --scale SCALE         unconditional guidance scale: eps = eps(x, empty) + scale * (eps(x, cond) - eps(x, empty))
-  --from-file FROM_FILE
-                        if specified, load prompts from this file
-  --config CONFIG       path to config which constructs model
-  --ckpt CKPT           path to checkpoint of model
-  --seed SEED           the seed (for reproducible sampling)
-  --use_int8            whether to use quantization method
-  --precision {full,autocast}
-                        evaluate at this precision
-```
 
 ## Invitation to open-source contribution
 Referring to the successful attempts of [BLOOM](https://bigscience.huggingface.co/) and [Stable Diffusion](https://en.wikipedia.org/wiki/Stable_Diffusion), any and all developers and partners with computing powers, datasets, models are welcome to join and build the Colossal-AI community, making efforts towards the era of big AI models!
