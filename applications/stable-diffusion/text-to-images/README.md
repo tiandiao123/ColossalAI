@@ -77,19 +77,32 @@ The dataSet is from [Dataset-HuggingFace](https://huggingface.co/datasets?task_c
 
 ## Training
 
-We provide the script `train_colossalai.sh` to run the training task with colossalai. Meanwhile, we have enlightened other training process such as DDP model in PyTorch. You can also use `train_ddp.sh` to run the training task with ddp to compare the corresponding performance.
+We provide the script `01_trainer_no_colossalai.sh` to run the training task without colossalai. Meanwhile, we also provided script called `02_run_trainer_with_colossalai.sh` to train text-to-image model using colossalai. Also, if you want to LoRA to fine-tune your model, we also provided a bash script called `03_run_trainer_with_colossalai_lora.sh` to fine-tune your model. If you are not familar with, you can check this [website](https://huggingface.co/docs/diffusers/training/lora). There is a simple example below to demonstarte how to launch training. 
 
-In `train_colossalai.sh` the main command is
 
 ```
-python main.py --logdir /tmp/ --train --base configs/train_colossalai.yaml --ckpt 512-base-ema.ckpt
-```
+# your model name, the python script will automaticall download corresponding model from model hub.
+export MODEL_NAME="CompVis/stable-diffusion-v1-4"
+# You can provide official dataset to train your model. You also can provide your own dataset. 
+export dataset_name="lambdalabs/pokemon-blip-captions"
 
-- You can change the `--logdir` to decide where to save the log information and the last checkpoint.
-  - You will find your ckpt in `logdir/checkpoints` or `logdir/diff_tb/version_0/checkpoints`
-  - You will find your train config yaml in `logdir/configs`
-- You can add the `--ckpt` if you want to load the pretrained model, for example `512-base-ema.ckpt`
-- You can change the `--base` to specify the path of config yaml
+torchrun --nproc_per_node 4 stable_diffusion_colossalai_trainer.py \
+    --mixed_precision="fp16" \
+    --pretrained_model_name_or_path=$MODEL_NAME \
+    --dataset_name=$dataset_name \
+    --use_ema \
+    --resolution=512 --center_crop --random_flip \
+    --train_batch_size=1 \
+    --gradient_accumulation_steps=4 \
+    --gradient_checkpointing \
+    --max_train_steps=800 \
+    --learning_rate=1e-05 \
+    --max_grad_norm=1 \
+    --lr_scheduler="constant" --lr_warmup_steps=0 \
+    --output_dir="sd-pokemon-model" \
+    --plugin="gemini" \
+    --placement="cuda"
+```
 
 ### Training config
 
