@@ -58,13 +58,10 @@ Notice that xformers will accelerate the training process at the cost of extra d
 pip install xformers==0.0.12
 ```
 
-## Download the model checkpoint from pretrained
 
-### stable-diffusion-v2-base (Recommended)
+### stable-diffusion-model (Recommended)
 
-```
-wget https://huggingface.co/stabilityai/stable-diffusion-2-base/resolve/main/512-base-ema.ckpt
-```
+For example: You can follow this [link] (https://huggingface.co/CompVis/stable-diffusion-v1-4) to download your model. In our training example, we choose Stable-Diffusion-v1-4 as a demo example to who how to train our model. 
 
 ### stable-diffusion-v1-4
 
@@ -73,17 +70,10 @@ git lfs install
 git clone https://huggingface.co/CompVis/stable-diffusion-v1-4
 ```
 
-### stable-diffusion-v1-5 from runway
-
-```
-git lfs install
-git clone https://huggingface.co/runwayml/stable-diffusion-v1-5
-```
 
 ## Dataset
 
-The dataSet is from [LAION-5B](https://laion.ai/blog/laion-5b/), the subset of [LAION](https://laion.ai/),
-you should the change the `data.file_path` in the `config/train_colossalai.yaml`
+The dataSet is from [Dataset-HuggingFace](https://huggingface.co/datasets?task_categories=task_categories:text-to-image&sort=downloads). In our example, we choose lambdalabs/pokemon-blip-captions as a demo example. You can also create your own dataset, but make sure your data set matches with formats in this [website] (https://huggingface.co/docs/diffusers/training/create_dataset). 
 
 ## Training
 
