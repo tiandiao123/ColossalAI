@@ -58,55 +58,6 @@ Notice that xformers will accelerate the training process at the cost of extra d
 pip install xformers==0.0.12
 ```
 
-### Option #2: Use Docker
-
-To use the stable diffusion Docker image, you can either build using the provided the [Dockerfile](./docker/Dockerfile) or pull a Docker image from our Docker hub.
-
-```
-# 1. build from dockerfile
-cd ColossalAI/examples/images/diffusion/docker
-docker build -t hpcaitech/diffusion:0.2.0  .
-
-# 2. pull from our docker hub
-docker pull hpcaitech/diffusion:0.2.0
-```
-
-Once you have the image ready, you can launch the image with the following command
-
-```bash
-########################
-# On Your Host Machine #
-########################
-# make sure you start your image in the repository root directory
-cd ColossalAI
-
-# run the docker container
-docker run --rm \
-  -it --gpus all \
-  -v $PWD:/workspace \
-  -v <your-data-dir>:/data/scratch \
-  -v <hf-cache-dir>:/root/.cache/huggingface \
-  hpcaitech/diffusion:0.2.0 \
-  /bin/bash
-
-########################
-#  Inside a Container  #
-########################
-# Once you have entered the docker container, go to the stable diffusion directory for training
-cd examples/images/diffusion/
-
-# Download the model checkpoint from pretrained (See the following steps)
-# Set up your configuration the "train_colossalai.sh" (See the following steps)
-# start training with colossalai
-bash train_colossalai.sh
-```
-
-It is important for you to configure your volume mapping in order to get the best training experience.
-1. **Mandatory**, mount your prepared data to `/data/scratch` via `-v <your-data-dir>:/data/scratch`, where you need to replace `<your-data-dir>` with the actual data path on your machine. Notice that within docker we need to transform the Windows path to a Linux one, e.g. `C:\User\Desktop` into `/mnt/c/User/Desktop`. 
-2. **Recommended**, store the downloaded model weights to your host machine instead of the container directory via `-v <hf-cache-dir>:/root/.cache/huggingface`, where you need to replace the `<hf-cache-dir>` with the actual path. In this way, you don't have to repeatedly download the pretrained weights for every `docker run`.
-3. **Optional**, if you encounter any problem stating that shared memory is insufficient inside container, please add `-v /dev/shm:/dev/shm` to your `docker run` command.
-
-
 ## Download the model checkpoint from pretrained
 
 ### stable-diffusion-v2-base (Recommended)
