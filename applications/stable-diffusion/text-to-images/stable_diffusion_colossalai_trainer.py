@@ -482,6 +482,7 @@ def main():
     booster.save_model(unet, os.path.join(args.output_dir, "diffusion_pytorch_model.bin"))
     logger.info(f"Saving model checkpoint to {args.output_dir} on rank {local_rank}")
 
-    
+
+
 if __name__ == "__main__":
     main()
