@@ -48,7 +48,6 @@ def rotate_half(x):
     x2 = x[..., x.shape[-1] // 2 :]
     return torch.cat((-x2, x1), dim=-1)
 
-
 def apply_rotary_pos_emb(q, k, cos, sin, position_ids):
     # The first two dimensions of cos and sin are always 1, so we can `squeeze` them.
     cos = cos.squeeze(1).squeeze(0)  # [seq_len, dim]
@@ -73,7 +72,6 @@ def llama_triton_context_attention(
                 attn_output,
                 infer_state.start_loc,
                 infer_state.seq_len,
-                # infer_state.cache_manager.past_key_values_length,
                 infer_state.max_len_in_batch,
             )
         else:
@@ -84,7 +82,6 @@ def llama_triton_context_attention(
                 attn_output,
                 infer_state.start_loc,
                 infer_state.seq_len,
-                # infer_state.cache_manager.past_key_values_length,
                 infer_state.max_len_in_batch,
             )
     else:
@@ -96,10 +93,8 @@ def llama_triton_context_attention(
             attn_output,
             infer_state.start_loc,
             infer_state.seq_len,
-            # infer_state.cache_manager.past_key_values_length,
             infer_state.max_len_in_batch,
         )
-
 
 def llama_triton_token_attention(query_states, attn_output, infer_state, num_key_value_groups=1, q_head_num = -1, head_dim = -1):
     if HAS_TRITON_FLASH_DECODING_KERNEL and q_head_num != -1 and head_dim != -1:
@@ -464,13 +459,14 @@ class LlamaInferenceForwards:
                 )
 
             if HAS_LIGHTLLM_KERNEL:
+                
                 attn_output = torch.empty_like(query_states)
                 llama_triton_token_attention(query_states = query_states, 
-                                               attn_output = attn_output, 
-                                               infer_state = infer_state, 
-                                               num_key_value_groups = self.num_key_value_groups, 
-                                               q_head_num = q_len * self.num_heads, 
-                                               head_dim = self.head_dim)
+                                             attn_output = attn_output, 
+                                             infer_state = infer_state, 
+                                             num_key_value_groups = self.num_key_value_groups, 
+                                             q_head_num = q_len * self.num_heads, 
+                                             head_dim = self.head_dim)
             else:
                 self.num_heads // self.num_key_value_heads
                 cache_k = infer_state.cache_manager.key_buffer[infer_state.decode_layer_id]
